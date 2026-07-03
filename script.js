@@ -1,54 +1,79 @@
-
 /* =========================================================
-   🧠 GLOBAL JET LAG PLANNER — 1/3
-   CORE ENGINE + TIMEZONE + AUTOCOMPLETE FIX (ADDED ONLY)
+   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
+   PART 1/3 — CORE ENGINE + AUTOCOMPLETE + TIME SYSTEM
 ========================================================= */
 
 
 /* -------------------------
-   GLOBAL LOCK
+   GLOBAL STATE
 ------------------------- */
 
 let __isRunning = false;
 
 
 /* -------------------------
-   UNIVERSAL TIMEZONE ENGINE
+   CITY DATABASE
 ------------------------- */
 
-function getUTCOffset(timeZone) {
+const CITY_TIMEZONES = [
+    { name: "New York", tz: "America/New_York" },
+    { name: "Los Angeles", tz: "America/Los_Angeles" },
+    { name: "London", tz: "Europe/London" },
+    { name: "Tokyo", tz: "Asia/Tokyo" },
+    { name: "Hong Kong", tz: "Asia/Hong_Kong" },
+    { name: "Sydney", tz: "Australia/Sydney" },
+    { name: "Dubai", tz: "Asia/Dubai" },
+    { name: "Paris", tz: "Europe/Paris" },
+    { name: "Singapore", tz: "Asia/Singapore" }
+];
 
+
+/* -------------------------
+   INPUT NORMALIZATION
+------------------------- */
+
+function normalizeInput(input) {
+    const raw = input.trim().toLowerCase();
+
+    const alias = {
+        "ny": "America/New_York",
+        "new york": "America/New_York",
+        "la": "America/Los_Angeles",
+        "los angeles": "America/Los_Angeles",
+        "london": "Europe/London",
+        "tokyo": "Asia/Tokyo",
+        "hong kong": "Asia/Hong_Kong",
+        "hk": "Asia/Hong_Kong",
+        "sydney": "Australia/Sydney"
+    };
+
+    if (alias[raw]) return alias[raw];
+
+    for (const c of CITY_TIMEZONES) {
+        if (c.name.toLowerCase().includes(raw)) return c.tz;
+    }
+
+    return "UTC";
+}
+
+
+/* -------------------------
+   REAL TIMEZONE OFFSET (FIXED)
+------------------------- */
+
+function getOffsetHours(timeZone) {
     try {
-
         const now = new Date();
-        const utc = now.getTime();
 
-        const tzString = new Intl.DateTimeFormat("en-US", {
-            timeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false
-        }).format(now);
-
-        const [datePart, timePart] = tzString.split(", ");
-
-        const [month, day, year] = datePart.split("/").map(Number);
-        const [hour, minute, second] = timePart.split(":").map(Number);
-
-        const tzTime = Date.UTC(
-            year,
-            month - 1,
-            day,
-            hour,
-            minute,
-            second
+        const utc = new Date(
+            now.toLocaleString("en-US", { timeZone: "UTC" })
         );
 
-        return (tzTime - utc) / 3600000;
+        const local = new Date(
+            now.toLocaleString("en-US", { timeZone })
+        );
+
+        return (local - utc) / (1000 * 60 * 60);
 
     } catch (e) {
         console.warn("Timezone error:", timeZone);
@@ -58,291 +83,236 @@ function getUTCOffset(timeZone) {
 
 
 /* -------------------------
-   GLOBAL DIFF ENGINE
+   TIME DIFFERENCE (DIRECTIONAL)
 ------------------------- */
 
-function diffHours(from, to) {
-    return getUTCOffset(to) - getUTCOffset(from);
+function diffHours(fromTZ, toTZ) {
+    return getOffsetHours(toTZ) - getOffsetHours(fromTZ);
 }
 
 
 /* -------------------------
-   ALIAS SYSTEM (kept as-is)
+   AUTOCOMPLETE ENGINE
 ------------------------- */
 
-const ALIAS = {
-    "hong kong": "Asia/Hong_Kong",
-    "hk": "Asia/Hong_Kong",
-    "los angeles": "America/Los_Angeles",
-    "la": "America/Los_Angeles",
-    "new york": "America/New_York",
-    "ny": "America/New_York",
-    "london": "Europe/London",
-    "tokyo": "Asia/Tokyo",
-    "sydney": "Australia/Sydney"
-};
+function showDropdown(inputEl, dropdownEl, items) {
+    dropdownEl.innerHTML = "";
 
-const TIMEZONES = Intl.supportedValuesOf("timeZone");
+    if (!items.length) {
+        dropdownEl.style.display = "none";
+        return;
+    }
+
+    items.slice(0, 6).forEach(item => {
+        const div = document.createElement("div");
+        div.textContent = item.name;
+
+        div.onclick = () => {
+            inputEl.value = item.name;
+            dropdownEl.style.display = "none";
+        };
+
+        dropdownEl.appendChild(div);
+    });
+
+    dropdownEl.style.display = "block";
+}
 
 
 /* -------------------------
-   FUZZY RESOLVER (unchanged logic)
+   AUTOCOMPLETE SETUP
 ------------------------- */
 
-function scoreMatch(input, target) {
-
-    input = input.toLowerCase();
-    target = target.toLowerCase();
-
-    if (target.includes(input)) return 2;
-
-    let score = 0;
-
-    for (let i = 0; i < input.length; i++) {
-        if (target[i] === input[i]) score++;
-    }
-
-    return score / target.length;
-}
-
-function resolveTimezone(input) {
-
-    const key = input.trim().toLowerCase();
-
-    if (ALIAS[key]) return ALIAS[key];
-
-    let best = null;
-    let bestScore = 0;
-
-    for (const tz of TIMEZONES) {
-
-        const s = scoreMatch(key, tz);
-
-        if (s > bestScore) {
-            bestScore = s;
-            best = tz;
-        }
-    }
-
-    return best || "UTC";
-}
-
-
-/* =========================================================
-   🔥 ADDED FIX: AUTOCOMPLETE UI (THIS WAS MISSING)
-   (DO NOT REMOVE ANY OF YOUR LOGIC ABOVE)
-========================================================= */
-
-function setupAutocomplete(inputId, listId) {
-
+function setupAutocomplete(inputId, dropdownId) {
     const input = document.getElementById(inputId);
-    const list = document.getElementById(listId);
+    const dropdown = document.getElementById(dropdownId);
 
-    if (!input || !list) return;
+    if (!input || !dropdown) return;
 
     input.addEventListener("input", () => {
+        const value = input.value.toLowerCase().trim();
 
-        const val = input.value.trim().toLowerCase();
-        list.innerHTML = "";
-
-        if (!val) {
-            list.style.display = "none";
+        if (!value) {
+            dropdown.style.display = "none";
             return;
         }
 
-        const matches = TIMEZONES
-            .filter(tz => tz.toLowerCase().includes(val))
-            .slice(0, 8);
+        const matches = CITY_TIMEZONES.filter(c =>
+            c.name.toLowerCase().includes(value)
+        );
 
-        if (matches.length === 0) {
-            list.style.display = "none";
-            return;
-        }
-
-        matches.forEach(tz => {
-
-            const div = document.createElement("div");
-            div.textContent = tz;
-
-            div.onclick = () => {
-                input.value = tz;
-                list.style.display = "none";
-            };
-
-            list.appendChild(div);
-        });
-
-        list.style.display = "block";
+        showDropdown(input, dropdown, matches);
     });
 
     document.addEventListener("click", (e) => {
-        if (!input.contains(e.target)) {
-            list.style.display = "none";
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = "none";
         }
     });
 }
 
 
 /* -------------------------
-   INIT AUTOCOMPLETE (IMPORTANT)
+   UTILS
 ------------------------- */
 
-setupAutocomplete("fromInput", "fromList");
-setupAutocomplete("toInput", "toList");
-
-
-/* -------------------------
-   MODEL FUNCTIONS (unchanged)
-------------------------- */
-
-function flightFactor(h) {
-    if (h < 3) return 0.85;
-    if (h < 6) return 1;
-    if (h < 10) return 1.2;
-    return 1.4;
+function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
 }
 
-function chronotypeFactor(type) {
-    if (type === "morning") return 0.9;
-    if (type === "night") return 1.2;
-    return 1;
-}
-
-function recovery(diff) {
-    const abs = Math.abs(diff);
-    const base = abs * 0.6;
-
-    return {
-        min: Math.max(1, Math.round(base * 0.7)),
-        max: Math.round(base * 1.3)
-    };
-}
-
-function curve(i, n) {
-    const x = i / (n - 1 || 1);
-    return 1 - Math.exp(-2.5 * x);
-}
-
-
-/* -------------------------
-   TIME FORMAT
-------------------------- */
-
-function format(mins) {
-
+function formatMinutes(mins) {
+    mins = Math.round(mins);
     mins = ((mins % 1440) + 1440) % 1440;
 
-    let h = Math.floor(mins / 60);
-    let m = mins % 60;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
 
-    let ampm = h >= 12 ? "PM" : "AM";
-
-    h = h % 12 || 12;
-
-    return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+
+/* -------------------------
+   ADAPTATION CURVE (REALISTIC BASE)
+------------------------- */
+
+function adaptationCurve(day, totalDays) {
+    return Math.pow(day / totalDays, 1.25);
+}
+
+
+/* -------------------------
+   INIT
+------------------------- */
+
+document.addEventListener("DOMContentLoaded", () => {
+    setupAutocomplete("fromInput", "fromList");
+    setupAutocomplete("toInput", "toList");
+});
 /* =========================================================
-   🧠 GLOBAL JET LAG PLANNER — 2/3
-   CALCULATION ENGINE (CONNECTED VERSION)
+   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
+   PART 2/3 — CALCULATION ENGINE
 ========================================================= */
 
 
 /* -------------------------
-   MAIN FUNCTION
+   SIMPLE MODEL HELPERS
+------------------------- */
+
+function flightFactor(hours) {
+    // mild fatigue increase (NOT linear exaggeration)
+    return 1 + Math.log10(hours + 1) * 0.12;
+}
+
+
+/* -------------------------
+   SLEEP PERSONALIZATION (REPLACES CHRONOTYPE)
+------------------------- */
+
+function sleepPreferenceFactor(userSleepMinutes) {
+    // baseline = 23:00 (1380 min)
+    const baseline = 1380;
+
+    // normalize difference (-1 to +1 range approx)
+    const diff = (userSleepMinutes - baseline) / 240;
+
+    return 1 + diff * 0.08;
+}
+
+
+/* -------------------------
+   RECOVERY MODEL (REALISTIC HEURISTIC)
+------------------------- */
+
+function recoveryEstimate(diffHours) {
+    const d = Math.abs(diffHours);
+
+    if (d <= 3) return { min: 1, max: 2 };
+    if (d <= 6) return { min: 2, max: 4 };
+    if (d <= 9) return { min: 3, max: 6 };
+    return { min: 5, max: 8 };
+}
+
+
+/* -------------------------
+   MAIN CALCULATE FUNCTION
 ------------------------- */
 
 function calculate() {
-
-    console.log("Generate clicked");
 
     if (__isRunning) return;
     __isRunning = true;
 
     try {
 
-        /* -------------------------
-           UI ELEMENTS
-        ------------------------- */
+        /* ---------------- UI ---------------- */
 
-        const schedule = document.getElementById("schedule");
-        const tips = document.getElementById("tips");
-        const timeline = document.getElementById("timeline");
+        const scheduleEl = document.getElementById("schedule");
+        const tipsEl = document.getElementById("tips");
 
-        if (!schedule || !tips || !timeline) {
-            alert("Missing UI containers");
+        if (!scheduleEl || !tipsEl) {
+            alert("Missing UI elements");
             return;
         }
 
-        schedule.innerHTML = "";
-        tips.innerHTML = "";
-        timeline.innerHTML = "";
+        scheduleEl.innerHTML = "";
+        tipsEl.innerHTML = "";
 
-        /* -------------------------
-           INPUTS
-        ------------------------- */
+        /* ---------------- INPUTS ---------------- */
 
         const fromRaw = document.getElementById("fromInput")?.value || "";
         const toRaw = document.getElementById("toInput")?.value || "";
 
-        let days = Number(document.getElementById("days")?.value);
-        if (!Number.isFinite(days) || days < 1) days = 3;
-        if (days > 14) days = 14;
+        const days = clamp(
+            Number(document.getElementById("days")?.value || 3),
+            1,
+            14
+        );
 
         const flightTime = document.getElementById("flightTime")?.value;
 
-        const chronotype =
-            document.getElementById("chronotype")?.value || "neutral";
+        /* NEW: sleep input (replaces chronotype) */
+        const sleepTime =
+            document.getElementById("sleepTime")?.value || "23:00";
+
+        const [h, m] = sleepTime.split(":").map(Number);
+        const userSleepMinutes = h * 60 + m;
 
         if (!fromRaw || !toRaw) {
             alert("Please enter origin and destination");
             return;
         }
 
-        /* -------------------------
-           RESOLVE TIMEZONES (USING YOUR ALGORITHM)
-        ------------------------- */
+        /* ---------------- TIMEZONE ---------------- */
 
-        const from = resolveTimezone(fromRaw);
-        const to = resolveTimezone(toRaw);
+        const from = normalizeInput(fromRaw);
+        const to = normalizeInput(toRaw);
 
-        /* -------------------------
-           CORE TIME DIFFERENCE
-        ------------------------- */
-
-        const baseDiff = diffHours(from, to);
+        const baseDiff = diffHours(from, to); // directional
         const absDiff = Math.abs(baseDiff);
 
-        /* DO NOT distort raw diff — only model adjustment */
+        /* ---------------- ADJUSTED MODEL ---------------- */
+
         const adjustedDiff =
             baseDiff *
             flightFactor(absDiff) *
-            chronotypeFactor(chronotype);
+            sleepPreferenceFactor(userSleepMinutes);
 
-        const diff = Math.round(adjustedDiff);
-
-        /* -------------------------
-           OUTPUT STATS
-        ------------------------- */
+        /* ---------------- UI OUTPUTS ---------------- */
 
         document.getElementById("timeDifference").innerText =
-            diff + " hrs";
+            Math.round(adjustedDiff) + " hrs";
 
         document.getElementById("risk").innerText =
             absDiff > 10 ? "Very High" :
             absDiff > 6 ? "High" :
             absDiff > 3 ? "Medium" : "Low";
 
-        const rec = recovery(diff);
+        const rec = recoveryEstimate(baseDiff);
 
         document.getElementById("recovery").innerText =
             `${rec.min}–${rec.max} days`;
 
-        /* -------------------------
-           PREP SCORE
-        ------------------------- */
-
-        const prep = Math.min(100, Math.round((days / 7) * 100));
+        const prep = clamp(100 - absDiff * 7, 5, 100);
 
         document.getElementById("prep").innerText = prep + "%";
 
@@ -352,206 +322,233 @@ function calculate() {
         if (fill) fill.style.width = prep + "%";
         if (fillText) fillText.innerText = prep + "%";
 
-        /* -------------------------
-           SCHEDULE GENERATION
-        ------------------------- */
+        /* ---------------- SLEEP SCHEDULE ---------------- */
 
-        let baseSleep = 23 * 60;
-        let baseWake = 7 * 60;
+        const baseSleep = 23 * 60;
+        const baseWake = 7 * 60;
 
         for (let i = 0; i < days; i++) {
 
-            const shift = diff * curve(i, days);
+            const progress = adaptationCurve(i, days);
 
-            let sleep = (baseSleep + shift * 60 + 1440) % 1440;
-            let wake = (baseWake + shift * 60 + 1440) % 1440;
+            const shift = adjustedDiff * progress;
 
-            schedule.innerHTML += `
+            const sleep = Math.round(baseSleep + shift * 60);
+            const wake = Math.round(baseWake + shift * 60);
+
+            scheduleEl.innerHTML += `
                 <div class="day-card">
                     <h3>Day ${i + 1}</h3>
-                    <p>😴 Sleep: ${format(sleep)}</p>
-                    <p>⏰ Wake: ${format(wake)}</p>
-                    <p>☀️ Light: ${format(wake + 60)}</p>
-                    <p>☕ No caffeine after ${format(sleep - 300)}</p>
+                    <p>😴 Sleep: ${formatMinutes(sleep)}</p>
+                    <p>⏰ Wake: ${formatMinutes(wake)}</p>
+                    <p>☀️ Light: ${formatMinutes(wake + 60)}</p>
+                    <p>☕ No caffeine after ${formatMinutes(sleep - 300)}</p>
                 </div>
             `;
         }
 
-        /* -------------------------
-           FLIGHT INFO
-        ------------------------- */
+        /* ---------------- FLIGHT INFO ---------------- */
 
         document.getElementById("departureTime").innerText =
             flightTime || "--";
 
         document.getElementById("planeSleep").innerText =
-            diff > 0 ? "Sleep early on plane" : "Sleep mid-flight";
+            baseDiff > 0
+                ? "Sleep earlier on flight (eastward)"
+                : "Sleep mid-flight (westward)";
 
         document.getElementById("flightCoffee").innerText =
             "No caffeine 6–8h before flight";
 
         document.getElementById("hydration").innerText =
-            "Drink water hourly";
+            "Drink water regularly";
 
-        /* -------------------------
-           ARRIVAL PLAN
-        ------------------------- */
+        /* ---------------- TIPS ---------------- */
 
-        document.getElementById("arrivalCard").innerHTML = `
-            <p>☀ Get sunlight immediately</p>
-            <p>🚶 Walk 20–40 min</p>
-            <p>😴 Stay awake until local night</p>
-            <p>🚫 Avoid long naps</p>
+        tipsEl.innerHTML = `
+            <li>Shift sleep gradually before travel</li>
+            <li>Use morning light exposure to reset rhythm</li>
+            <li>Avoid caffeine late in destination daytime</li>
         `;
-
-        /* -------------------------
-           TIPS
-        ------------------------- */
-
-        tips.innerHTML = `
-            <li>Shift sleep gradually</li>
-            <li>Use light exposure strategically</li>
-            <li>Avoid caffeine late in day</li>
-        `;
-
-        /* -------------------------
-           TIMELINE
-        ------------------------- */
-
-        ["Reset", "Shift", "Adapt", "Stable"].forEach(t => {
-            timeline.innerHTML += `
-                <div class="timeline-item">
-                    <h4>${t}</h4>
-                </div>
-            `;
-        });
 
     } catch (err) {
-        console.warn("Calculation error:", err);
+        console.error("Calculation error:", err);
     } finally {
         __isRunning = false;
     }
 }
-
 /* =========================================================
-   🧠 GLOBAL JET LAG PLANNER — 3/3
-   FINAL STABILITY + UI + ANIMATION FIX LAYER
+   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
+   PART 3/3 — UX POLISH + ARRIVAL + FINAL MODEL
 ========================================================= */
 
 
 /* -------------------------
-   SAFE BUTTON BINDING
-   (prevents missing event issues)
+   PREP SCORE (IMPROVED MODEL)
 ------------------------- */
 
-window.addEventListener("DOMContentLoaded", () => {
+function computePrepScore(absDiff, daysUntilFlight) {
 
-    const btn = document.getElementById("generateBtn");
+    // harder jet lag = lower prep
+    let score = 100 - absDiff * 6;
 
-    if (btn && !btn.dataset.bound) {
-        btn.addEventListener("click", calculate);
-        btn.dataset.bound = "true";
+    // more prep time = better readiness
+    score += daysUntilFlight * 4;
+
+    return clamp(score, 5, 100);
+}
+
+
+/* -------------------------
+   ARRIVAL STRATEGY ENGINE
+------------------------- */
+
+function arrivalPlan(diffHours) {
+
+    const eastward = diffHours > 0;
+
+    if (Math.abs(diffHours) <= 3) {
+        return [
+            "Light exposure in morning",
+            "Normal sleep schedule adjustment",
+            "Avoid long naps"
+        ];
     }
-});
 
+    if (eastward) {
+        return [
+            "Get strong morning sunlight",
+            "Stay awake until local night",
+            "Avoid caffeine after midday",
+            "Use short naps only (20–30 min)"
+        ];
+    }
 
-/* -------------------------
-   GLOBAL EXECUTION LOCK (extra safety)
-------------------------- */
-
-window.__lock = false;
-
-
-/* -------------------------
-   UI RESET SAFETY
-   (prevents stacking / duplicate render bugs)
-------------------------- */
-
-function resetUI() {
-
-    const schedule = document.getElementById("schedule");
-    const tips = document.getElementById("tips");
-    const timeline = document.getElementById("timeline");
-
-    if (schedule) schedule.innerHTML = "";
-    if (tips) tips.innerHTML = "";
-    if (timeline) timeline.innerHTML = "";
-
-    restartAnimation(schedule);
+    return [
+        "Get afternoon sunlight",
+        "Sleep slightly later than usual",
+        "Avoid early bedtime",
+        "Stay active during evening"
+    ];
 }
 
 
 /* -------------------------
-   ANIMATION RESTART FIX
-   (fixes “only works once” issue)
+   MAIN FUNCTION (EXTENSIONS ONLY)
+   - this assumes Part 2 already ran logic
 ------------------------- */
 
-function restartAnimation(el) {
+function calculate() {
 
-    if (!el) return;
-
-    el.style.animation = "none";
-    el.offsetHeight; // force reflow
-    el.style.animation = "";
-}
-
-
-/* -------------------------
-   INPUT SANITIZER
-   (prevents NaN / broken calculations)
-------------------------- */
-
-function sanitizeInputs() {
-
-    const daysEl = document.getElementById("days");
-
-    if (!daysEl) return;
-
-    let v = Number(daysEl.value);
-
-    if (!Number.isFinite(v) || v < 1) v = 3;
-    if (v > 14) v = 14;
-
-    daysEl.value = v;
-}
-
-
-/* -------------------------
-   GLOBAL ERROR HANDLER
-------------------------- */
-
-window.addEventListener("error", (e) => {
-    console.warn("JetLag runtime error:", e.message);
-});
-
-
-/* -------------------------
-   FINAL WRAPPER AROUND calculate()
-   (DO NOT REMOVE — THIS IS WHAT MAKES IT STABLE)
-------------------------- */
-
-const __originalCalculate = calculate;
-
-calculate = function () {
-
-    console.log("Generate clicked (stable wrapper)");
-
-    if (window.__lock) return;
-    window.__lock = true;
+    if (__isRunning) return;
+    __isRunning = true;
 
     try {
 
-        sanitizeInputs();
-        resetUI();
+        /* ---------------- INPUTS ---------------- */
 
-        return __originalCalculate();
+        const fromRaw = document.getElementById("fromInput")?.value || "";
+        const toRaw = document.getElementById("toInput")?.value || "";
+
+        const days = clamp(
+            Number(document.getElementById("days")?.value || 3),
+            1,
+            14
+        );
+
+        const daysUntilFlight = days;
+
+        const flightTime = document.getElementById("flightTime")?.value;
+
+        const sleepTime =
+            document.getElementById("sleepTime")?.value || "23:00";
+
+        const [h, m] = sleepTime.split(":").map(Number);
+        const userSleepMinutes = h * 60 + m;
+
+        if (!fromRaw || !toRaw) {
+            alert("Please enter origin and destination");
+            return;
+        }
+
+        /* ---------------- TIMEZONE ---------------- */
+
+        const from = normalizeInput(fromRaw);
+        const to = normalizeInput(toRaw);
+
+        const baseDiff = diffHours(from, to);
+        const absDiff = Math.abs(baseDiff);
+
+        const adjustedDiff =
+            baseDiff *
+            flightFactor(absDiff) *
+            sleepPreferenceFactor(userSleepMinutes);
+
+        /* ---------------- UI UPDATES ---------------- */
+
+        document.getElementById("timeDifference").innerText =
+            Math.round(adjustedDiff) + " hrs";
+
+        document.getElementById("risk").innerText =
+            absDiff > 10 ? "Very High" :
+            absDiff > 6 ? "High" :
+            absDiff > 3 ? "Medium" : "Low";
+
+        const recovery = recoveryEstimate(baseDiff);
+
+        document.getElementById("recovery").innerText =
+            `${recovery.min}–${recovery.max} days`;
+
+        /* ---------------- PREP SCORE ---------------- */
+
+        const prep = computePrepScore(absDiff, daysUntilFlight);
+
+        document.getElementById("prep").innerText = prep + "%";
+
+        const fill = document.getElementById("adjustmentFill");
+        const fillText = document.getElementById("adjustmentText");
+
+        if (fill) fill.style.width = prep + "%";
+        if (fillText) fillText.innerText = prep + "%";
+
+        /* ---------------- FLIGHT INFO ---------------- */
+
+        document.getElementById("departureTime").innerText =
+            flightTime || "--";
+
+        document.getElementById("planeSleep").innerText =
+            baseDiff > 0
+                ? "Sleep earlier on flight (eastward)"
+                : "Sleep mid-flight (westward)";
+
+        document.getElementById("flightCoffee").innerText =
+            "No caffeine 6–8h before flight";
+
+        document.getElementById("hydration").innerText =
+            "Drink water regularly during flight";
+
+        /* ---------------- ARRIVAL PLAN ---------------- */
+
+        const arrival = arrivalPlan(baseDiff);
+
+        document.getElementById("arrivalCard").innerHTML =
+            arrival.map(a => `<p>• ${a}</p>`).join("");
+
+        /* ---------------- TIPS ---------------- */
+
+        const tips = [
+            "Shift sleep schedule gradually before travel",
+            "Use light exposure strategically to reset circadian rhythm",
+            "Avoid caffeine late in destination daytime",
+            "Keep naps short (20–30 min max)"
+        ];
+
+        document.getElementById("tips").innerHTML =
+            tips.map(t => `<li>${t}</li>`).join("");
 
     } catch (err) {
-
-        console.warn("Safe catch:", err);
-
+        console.error("Calculation error:", err);
     } finally {
-
-        window.__lock = false;
+        __isRunning = false;
     }
-};
+}

@@ -6,9 +6,7 @@
 <title>Jet Lag Planner</title>
 
 <link rel="stylesheet" href="style.css">
-
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
 </head>
 
 <body>
@@ -22,57 +20,56 @@
 ========================= -->
 
 <header>
-
     <div class="globe-container">
-
         <div class="orbit">
             <div class="plane">✈</div>
         </div>
-
         <div class="globe">🌍</div>
-
     </div>
 
     <h1>Jet Lag Planner</h1>
-    <p>Type your route and get a full sleep recovery plan</p>
-
+    <p>Get a smart sleep recovery plan for your trip</p>
 </header>
 
+
 <!-- =========================
-   TRIP INPUTS (AUTOFILL SYSTEM)
+   INPUT SECTION
 ========================= -->
 
 <section class="card">
 
 <h2>Trip Setup</h2>
 
+<!-- FROM -->
 <div class="search-box">
     <label>✈ Flying From</label>
-    <input type="text" id="fromInput" placeholder="Type city or timezone..." autocomplete="off">
+    <input type="text" id="fromInput" placeholder="Type city..." autocomplete="off">
     <div class="dropdown" id="fromList"></div>
 </div>
 
+<!-- TO -->
 <div class="search-box">
     <label>🛬 Flying To</label>
-    <input type="text" id="toInput" placeholder="Type city or timezone..." autocomplete="off">
+    <input type="text" id="toInput" placeholder="Type city..." autocomplete="off">
     <div class="dropdown" id="toList"></div>
 </div>
 
+<!-- DAYS -->
 <label>📅 Days Until Flight</label>
-<input type="number" id="days" min="1" max="30" value="2">
+<input type="number" id="days" min="1" max="14" value="3">
 
+<!-- FLIGHT TIME -->
 <label>🕒 Flight Time</label>
 <input type="time" id="flightTime">
 
-<label>😴 Usual Bedtime</label>
-<input type="time" id="bedtime">
-
-<label>⏰ Usual Wake Time</label>
-<input type="time" id="wakeTime">
+<!-- SLEEP INPUT (IMPORTANT REPLACEMENT FOR CHRONOTYPE) -->
+<label>🧠 What time do you normally sleep?</label>
+<input type="time" id="sleepTime" value="23:00">
 
 <button onclick="calculate()">Generate Plan</button>
 
 </section>
+
 
 <!-- =========================
    SUMMARY
@@ -102,6 +99,7 @@
 
 </section>
 
+
 <!-- =========================
    BODY CLOCK
 ========================= -->
@@ -111,15 +109,16 @@
 <h2>Body Clock Adjustment</h2>
 
 <div class="bar">
-<div id="adjustmentFill"></div>
+    <div id="adjustmentFill"></div>
 </div>
 
 <p id="adjustmentText">0%</p>
 
 </section>
 
+
 <!-- =========================
-   DAILY SCHEDULE
+   DAILY SLEEP PLAN
 ========================= -->
 
 <section class="card">
@@ -129,6 +128,7 @@
 <div id="schedule"></div>
 
 </section>
+
 
 <!-- =========================
    FLIGHT INFO
@@ -140,13 +140,14 @@
 
 <p>Departure: <span id="departureTime">--</span></p>
 <p>😴 Plane Sleep: <span id="planeSleep">--</span></p>
-<p>☕ Caffeine Rule: <span id="flightCoffee">--</span></p>
+<p>☕ Caffeine: <span id="flightCoffee">--</span></p>
 <p>💧 Hydration: <span id="hydration">--</span></p>
 
 </section>
 
+
 <!-- =========================
-   ARRIVAL
+   ARRIVAL PLAN
 ========================= -->
 
 <section class="card">
@@ -156,6 +157,7 @@
 <div id="arrivalCard"></div>
 
 </section>
+
 
 <!-- =========================
    TIPS
@@ -169,17 +171,6 @@
 
 </section>
 
-<!-- =========================
-   TIMELINE (optional visual)
-========================= -->
-
-<section class="card">
-
-<h2>🕒 Timeline</h2>
-
-<div id="timeline"></div>
-
-</section>
 
 <!-- =========================
    FOOTER
