@@ -1,6 +1,7 @@
+
 /* =========================================================
-   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
-   PART 1/3 — CORE ENGINE + AUTOCOMPLETE + TIME SYSTEM
+   🌍 JET LAG PLANNER — CLEAN FIXED BUILD
+   PART 1/3 — CORE + AUTOCOMPLETE + TIME ENGINE
 ========================================================= */
 
 
@@ -12,30 +13,30 @@ let __isRunning = false;
 
 
 /* -------------------------
-   CITY DATABASE
+   CITY DATABASE (USED FOR AUTOCOMPLETE)
 ------------------------- */
 
-const CITY_TIMEZONES = [
+const CITY_DATA = [
     { name: "New York", tz: "America/New_York" },
     { name: "Los Angeles", tz: "America/Los_Angeles" },
     { name: "London", tz: "Europe/London" },
     { name: "Tokyo", tz: "Asia/Tokyo" },
     { name: "Hong Kong", tz: "Asia/Hong_Kong" },
     { name: "Sydney", tz: "Australia/Sydney" },
-    { name: "Dubai", tz: "Asia/Dubai" },
     { name: "Paris", tz: "Europe/Paris" },
+    { name: "Dubai", tz: "Asia/Dubai" },
     { name: "Singapore", tz: "Asia/Singapore" }
 ];
 
 
 /* -------------------------
-   INPUT NORMALIZATION
+   INPUT NORMALIZER
 ------------------------- */
 
 function normalizeInput(input) {
     const raw = input.trim().toLowerCase();
 
-    const alias = {
+    const aliases = {
         "ny": "America/New_York",
         "new york": "America/New_York",
         "la": "America/Los_Angeles",
@@ -47,10 +48,12 @@ function normalizeInput(input) {
         "sydney": "Australia/Sydney"
     };
 
-    if (alias[raw]) return alias[raw];
+    if (aliases[raw]) return aliases[raw];
 
-    for (const c of CITY_TIMEZONES) {
-        if (c.name.toLowerCase().includes(raw)) return c.tz;
+    for (const city of CITY_DATA) {
+        if (city.name.toLowerCase().includes(raw)) {
+            return city.tz;
+        }
     }
 
     return "UTC";
@@ -58,7 +61,7 @@ function normalizeInput(input) {
 
 
 /* -------------------------
-   REAL TIMEZONE OFFSET (FIXED)
+   TIMEZONE OFFSET (FIXED RELIABLE METHOD)
 ------------------------- */
 
 function getOffsetHours(timeZone) {
@@ -73,7 +76,7 @@ function getOffsetHours(timeZone) {
             now.toLocaleString("en-US", { timeZone })
         );
 
-        return (local - utc) / (1000 * 60 * 60);
+        return (local - utc) / 3600000;
 
     } catch (e) {
         console.warn("Timezone error:", timeZone);
@@ -83,7 +86,7 @@ function getOffsetHours(timeZone) {
 
 
 /* -------------------------
-   TIME DIFFERENCE (DIRECTIONAL)
+   TIME DIFFERENCE ENGINE
 ------------------------- */
 
 function diffHours(fromTZ, toTZ) {
@@ -92,30 +95,30 @@ function diffHours(fromTZ, toTZ) {
 
 
 /* -------------------------
-   AUTOCOMPLETE ENGINE
+   AUTOCOMPLETE SYSTEM
 ------------------------- */
 
-function showDropdown(inputEl, dropdownEl, items) {
-    dropdownEl.innerHTML = "";
+function showDropdown(input, dropdown, list) {
+    dropdown.innerHTML = "";
 
-    if (!items.length) {
-        dropdownEl.style.display = "none";
+    if (!list.length) {
+        dropdown.style.display = "none";
         return;
     }
 
-    items.slice(0, 6).forEach(item => {
+    list.slice(0, 6).forEach(item => {
         const div = document.createElement("div");
         div.textContent = item.name;
 
         div.onclick = () => {
-            inputEl.value = item.name;
-            dropdownEl.style.display = "none";
+            input.value = item.name;
+            dropdown.style.display = "none";
         };
 
-        dropdownEl.appendChild(div);
+        dropdown.appendChild(div);
     });
 
-    dropdownEl.style.display = "block";
+    dropdown.style.display = "block";
 }
 
 
@@ -130,15 +133,15 @@ function setupAutocomplete(inputId, dropdownId) {
     if (!input || !dropdown) return;
 
     input.addEventListener("input", () => {
-        const value = input.value.toLowerCase().trim();
+        const val = input.value.toLowerCase().trim();
 
-        if (!value) {
+        if (!val) {
             dropdown.style.display = "none";
             return;
         }
 
-        const matches = CITY_TIMEZONES.filter(c =>
-            c.name.toLowerCase().includes(value)
+        const matches = CITY_DATA.filter(c =>
+            c.name.toLowerCase().includes(val)
         );
 
         showDropdown(input, dropdown, matches);
@@ -159,60 +162,61 @@ function setupAutocomplete(inputId, dropdownId) {
 function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
 }
-
 function formatMinutes(mins) {
     mins = Math.round(mins);
     mins = ((mins % 1440) + 1440) % 1440;
 
-    const h = Math.floor(mins / 60);
+    let h = Math.floor(mins / 60);
     const m = mins % 60;
 
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const ampm = h >= 12 ? "PM" : "AM";
+
+    h = h % 12;
+    if (h === 0) h = 12;
+
+    return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-
 /* -------------------------
-   ADAPTATION CURVE (REALISTIC BASE)
+   ADAPTATION CURVE (SMOOTH PROGRESSION)
 ------------------------- */
 
 function adaptationCurve(day, totalDays) {
-    return Math.pow(day / totalDays, 1.25);
+    return Math.pow(day / totalDays, 1.3);
 }
 
 
 /* -------------------------
-   INIT
+   INIT AUTOCOMPLETE
 ------------------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
     setupAutocomplete("fromInput", "fromList");
     setupAutocomplete("toInput", "toList");
 });
+
 /* =========================================================
-   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
+   🌍 JET LAG PLANNER — CLEAN FIXED BUILD
    PART 2/3 — CALCULATION ENGINE
 ========================================================= */
 
 
 /* -------------------------
-   SIMPLE MODEL HELPERS
+   FLIGHT IMPACT MODEL
 ------------------------- */
 
 function flightFactor(hours) {
-    // mild fatigue increase (NOT linear exaggeration)
     return 1 + Math.log10(hours + 1) * 0.12;
 }
 
 
 /* -------------------------
-   SLEEP PERSONALIZATION (REPLACES CHRONOTYPE)
+   SLEEP PERSONALIZATION
 ------------------------- */
 
 function sleepPreferenceFactor(userSleepMinutes) {
-    // baseline = 23:00 (1380 min)
-    const baseline = 1380;
+    const baseline = 1380; // 23:00
 
-    // normalize difference (-1 to +1 range approx)
     const diff = (userSleepMinutes - baseline) / 240;
 
     return 1 + diff * 0.08;
@@ -220,7 +224,7 @@ function sleepPreferenceFactor(userSleepMinutes) {
 
 
 /* -------------------------
-   RECOVERY MODEL (REALISTIC HEURISTIC)
+   RECOVERY ESTIMATION
 ------------------------- */
 
 function recoveryEstimate(diffHours) {
@@ -244,7 +248,7 @@ function calculate() {
 
     try {
 
-        /* ---------------- UI ---------------- */
+        /* ---------------- UI ELEMENTS ---------------- */
 
         const scheduleEl = document.getElementById("schedule");
         const tipsEl = document.getElementById("tips");
@@ -270,7 +274,6 @@ function calculate() {
 
         const flightTime = document.getElementById("flightTime")?.value;
 
-        /* NEW: sleep input (replaces chronotype) */
         const sleepTime =
             document.getElementById("sleepTime")?.value || "23:00";
 
@@ -287,17 +290,17 @@ function calculate() {
         const from = normalizeInput(fromRaw);
         const to = normalizeInput(toRaw);
 
-        const baseDiff = diffHours(from, to); // directional
+        const baseDiff = diffHours(from, to);
         const absDiff = Math.abs(baseDiff);
 
-        /* ---------------- ADJUSTED MODEL ---------------- */
+        /* ---------------- ADJUSTED DIFF ---------------- */
 
         const adjustedDiff =
             baseDiff *
             flightFactor(absDiff) *
             sleepPreferenceFactor(userSleepMinutes);
 
-        /* ---------------- UI OUTPUTS ---------------- */
+        /* ---------------- SUMMARY UI ---------------- */
 
         document.getElementById("timeDifference").innerText =
             Math.round(adjustedDiff) + " hrs";
@@ -312,6 +315,8 @@ function calculate() {
         document.getElementById("recovery").innerText =
             `${rec.min}–${rec.max} days`;
 
+        /* ---------------- PREP SCORE ---------------- */
+
         const prep = clamp(100 - absDiff * 7, 5, 100);
 
         document.getElementById("prep").innerText = prep + "%";
@@ -322,7 +327,7 @@ function calculate() {
         if (fill) fill.style.width = prep + "%";
         if (fillText) fillText.innerText = prep + "%";
 
-        /* ---------------- SLEEP SCHEDULE ---------------- */
+        /* ---------------- DAILY SLEEP PLAN ---------------- */
 
         const baseSleep = 23 * 60;
         const baseWake = 7 * 60;
@@ -330,7 +335,6 @@ function calculate() {
         for (let i = 0; i < days; i++) {
 
             const progress = adaptationCurve(i, days);
-
             const shift = adjustedDiff * progress;
 
             const sleep = Math.round(baseSleep + shift * 60);
@@ -367,8 +371,9 @@ function calculate() {
 
         tipsEl.innerHTML = `
             <li>Shift sleep gradually before travel</li>
-            <li>Use morning light exposure to reset rhythm</li>
-            <li>Avoid caffeine late in destination daytime</li>
+            <li>Use morning sunlight to reset body clock</li>
+            <li>Avoid caffeine late in destination day</li>
+            <li>Keep naps short (20–30 min max)</li>
         `;
 
     } catch (err) {
@@ -377,22 +382,21 @@ function calculate() {
         __isRunning = false;
     }
 }
+
 /* =========================================================
-   🌍 JET LAG PLANNER — FINAL CLEAN BUILD
-   PART 3/3 — UX POLISH + ARRIVAL + FINAL MODEL
+   🌍 JET LAG PLANNER — CLEAN FIXED BUILD
+   PART 3/3 — ARRIVAL + POLISH + FINAL LOGIC
 ========================================================= */
 
 
 /* -------------------------
-   PREP SCORE (IMPROVED MODEL)
+   PREP SCORE MODEL (FINAL)
 ------------------------- */
 
 function computePrepScore(absDiff, daysUntilFlight) {
-
-    // harder jet lag = lower prep
     let score = 100 - absDiff * 6;
 
-    // more prep time = better readiness
+    // more time = better prep
     score += daysUntilFlight * 4;
 
     return clamp(score, 5, 100);
@@ -406,18 +410,19 @@ function computePrepScore(absDiff, daysUntilFlight) {
 function arrivalPlan(diffHours) {
 
     const eastward = diffHours > 0;
+    const d = Math.abs(diffHours);
 
-    if (Math.abs(diffHours) <= 3) {
+    if (d <= 3) {
         return [
-            "Light exposure in morning",
-            "Normal sleep schedule adjustment",
+            "Follow normal sleep schedule",
+            "Get morning sunlight",
             "Avoid long naps"
         ];
     }
 
     if (eastward) {
         return [
-            "Get strong morning sunlight",
+            "Get strong morning sunlight immediately",
             "Stay awake until local night",
             "Avoid caffeine after midday",
             "Use short naps only (20–30 min)"
@@ -425,17 +430,17 @@ function arrivalPlan(diffHours) {
     }
 
     return [
-        "Get afternoon sunlight",
-        "Sleep slightly later than usual",
-        "Avoid early bedtime",
-        "Stay active during evening"
+        "Get afternoon sunlight exposure",
+        "Stay active into evening",
+        "Avoid sleeping too early",
+        "Adjust bedtime gradually"
     ];
 }
 
 
 /* -------------------------
-   MAIN FUNCTION (EXTENSIONS ONLY)
-   - this assumes Part 2 already ran logic
+   MAIN CALCULATE (FINAL WRAPPER)
+   - reuses Part 2 logic but adds final polish
 ------------------------- */
 
 function calculate() {
@@ -455,8 +460,6 @@ function calculate() {
             1,
             14
         );
-
-        const daysUntilFlight = days;
 
         const flightTime = document.getElementById("flightTime")?.value;
 
@@ -484,7 +487,7 @@ function calculate() {
             flightFactor(absDiff) *
             sleepPreferenceFactor(userSleepMinutes);
 
-        /* ---------------- UI UPDATES ---------------- */
+        /* ---------------- SUMMARY UI ---------------- */
 
         document.getElementById("timeDifference").innerText =
             Math.round(adjustedDiff) + " hrs";
@@ -494,14 +497,14 @@ function calculate() {
             absDiff > 6 ? "High" :
             absDiff > 3 ? "Medium" : "Low";
 
-        const recovery = recoveryEstimate(baseDiff);
+        const rec = recoveryEstimate(baseDiff);
 
         document.getElementById("recovery").innerText =
-            `${recovery.min}–${recovery.max} days`;
+            `${rec.min}–${rec.max} days`;
 
         /* ---------------- PREP SCORE ---------------- */
 
-        const prep = computePrepScore(absDiff, daysUntilFlight);
+        const prep = computePrepScore(absDiff, days);
 
         document.getElementById("prep").innerText = prep + "%";
 
@@ -510,6 +513,33 @@ function calculate() {
 
         if (fill) fill.style.width = prep + "%";
         if (fillText) fillText.innerText = prep + "%";
+
+        /* ---------------- DAILY PLAN ---------------- */
+
+        const scheduleEl = document.getElementById("schedule");
+        scheduleEl.innerHTML = "";
+
+        const baseSleep = 23 * 60;
+        const baseWake = 7 * 60;
+
+        for (let i = 0; i < days; i++) {
+
+            const progress = adaptationCurve(i, days);
+            const shift = adjustedDiff * progress;
+
+            const sleep = Math.round(baseSleep + shift * 60);
+            const wake = Math.round(baseWake + shift * 60);
+
+            scheduleEl.innerHTML += `
+                <div class="day-card">
+                    <h3>Day ${i + 1}</h3>
+                    <p>😴 Sleep: ${formatMinutes(sleep)}</p>
+                    <p>⏰ Wake: ${formatMinutes(wake)}</p>
+                    <p>☀️ Light: ${formatMinutes(wake + 60)}</p>
+                    <p>☕ No caffeine after ${formatMinutes(sleep - 300)}</p>
+                </div>
+            `;
+        }
 
         /* ---------------- FLIGHT INFO ---------------- */
 
@@ -536,15 +566,12 @@ function calculate() {
 
         /* ---------------- TIPS ---------------- */
 
-        const tips = [
-            "Shift sleep schedule gradually before travel",
-            "Use light exposure strategically to reset circadian rhythm",
-            "Avoid caffeine late in destination daytime",
-            "Keep naps short (20–30 min max)"
-        ];
-
-        document.getElementById("tips").innerHTML =
-            tips.map(t => `<li>${t}</li>`).join("");
+        document.getElementById("tips").innerHTML = `
+            <li>Shift sleep gradually before travel</li>
+            <li>Use light exposure to reset circadian rhythm</li>
+            <li>Avoid caffeine late in destination daytime</li>
+            <li>Keep naps short (20–30 minutes max)</li>
+        `;
 
     } catch (err) {
         console.error("Calculation error:", err);
